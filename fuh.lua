@@ -6,35 +6,39 @@ if game:GetService("Players").LocalPlayer.Name == playeruser then
     local hs = game:GetService("HttpService")
     local lp = ps.LocalPlayer
 
-    -- Use executor request function if available to prevent HttpService blocks
     local requestFunc = (syn and syn.request) or http_request or request
 
     local function serverHop()
-        print("finding fresh server via request...")
+        print("fetching server list via proxy...")
         
+        -- Using an external JSON proxy format that PC executors can read without getting blocked
         local success, result = pcall(function()
-            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
-            local response = requestFunc({
-                Url = url,
-                Method = "GET"
-            })
-            if response and response.Body then
-                return hs:JSONDecode(response.Body)
+            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            
+            if requestFunc then
+                local res = requestFunc({Url = url, Method = "GET"})
+                if res and res.Body then
+                    return hs:JSONDecode(res.Body)
+                end
             end
-            return nil
+            
+            -- Fallback proxy method for PC executors if native request fails
+            local proxyUrl = "https://corsproxy.io/?" .. hs:UrlEncode(url)
+            local raw = game:HttpGet(proxyUrl)
+            return hs:JSONDecode(raw)
         end)
     
         if success and result and result.data then
             local servers = {}
             for _, s in ipairs(result.data) do
-                if type(s) == "table" and s.playing < s.maxPlayers and s.id ~= game.JobId and s.playing >= 1 then
+                if type(s) == "table" and s.playing < s.maxPlayers and s.id ~= game.JobId then
                     table.insert(servers, s.id)
                 end
             end
             
             if #servers > 0 then
                 local targetServer = servers[math.random(1, #servers)]
-                print("hopping to instance: " .. targetServer)
+                print("hopping to server: " .. targetServer)
                 
                 local tpSuccess = pcall(function()
                     ts:TeleportToPlaceInstance(game.PlaceId, targetServer, lp)
@@ -44,7 +48,7 @@ if game:GetService("Players").LocalPlayer.Name == playeruser then
             end
         end
         
-        -- Ultimate Fallback: standard queue if request api acts up
+        -- Ultimate fallback if API data is unreachable
         pcall(function()
             ts:Teleport(game.PlaceId, lp)
         end)
@@ -78,7 +82,7 @@ if game:GetService("Players").LocalPlayer.Name == playeruser then
         serverHop()
     end
 
-    -- 1. Independent State Watcher (Scans every 300ms)
+    -- 1. Live State Watcher (Scans every 300ms)
     task.spawn(function()
         task.wait(3)
         
@@ -97,7 +101,7 @@ if game:GetService("Players").LocalPlayer.Name == playeruser then
             end
             
             if not stillHasVicious then
-                print("vicious bee is officially gone, hopping...")
+                print("vicious bee gone, hopping now...")
                 triggerHop()
                 break
             end
